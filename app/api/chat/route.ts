@@ -128,8 +128,14 @@ ${contextText}`;
       systemInstruction: systemInstruction,
     });
 
+    // تأكد من أن التاريخ يبدأ برسالة من المستخدم (USER) كما تتطلب Gemini API
+    const formattedHistory = (history || []).filter((item: any, index: number) => {
+      if (index === 0 && item.role === 'model') return false;
+      return true;
+    });
+
     const chat = model.startChat({
-      history: history || [],
+      history: formattedHistory,
     });
 
     const result = await chat.sendMessage(message);
