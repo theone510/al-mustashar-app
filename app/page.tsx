@@ -200,6 +200,14 @@ export default function Home() {
               </div>
             </div>
           </div>
+
+          <button 
+            onClick={createNewSession}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all font-bold text-sm shadow-lg shadow-amber-500/5 active:scale-[0.98]"
+          >
+            <span className="text-xl leading-none">+</span>
+            <span>استشارة جديدة</span>
+          </button>
         </header>
 
         {/* Chat Messages */}
