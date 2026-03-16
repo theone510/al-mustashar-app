@@ -12,18 +12,18 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(req: Request) {
   try {
-    const { message } = await req.json();
+    const { message, history } = await req.json();
 
-    // 1. تحويل سؤال المحامي إلى متجهات (يجب استخدام نفس الموديل الذي استخدمناه في البايثون!)
+    // 1. تحويل سؤال المحامي إلى متجهات
     const embeddingModel = genAI.getGenerativeModel({ model: 'gemini-embedding-001' });
     const embeddingResult = await embeddingModel.embedContent(message);
     const queryEmbedding = embeddingResult.embedding.values;
 
-    // 2. البحث في Supabase (المطابقة مع 3072 بُعد)
+    // 2. البحث في Supabase
     const { data: documents, error } = await supabase.rpc('match_documents', {
       query_embedding: queryEmbedding,
-      match_threshold: 0.5, // نسبة التطابق المطلوبة
-      match_count: 5 // سحب أفضل 5 نتائج قانونية
+      match_threshold: 0.5,
+      match_count: 5
     });
 
     if (error) throw error;
@@ -122,13 +122,17 @@ export async function POST(req: Request) {
 السياق القانوني والسوابق المتاحة لك حصرياً لهذه الاستشارة:
 ${contextText}`;
 
-    // 5. استخدام أحدث موديل كما طلبت (Gemini 3 Flash Preview)
+    // 5. استخدام أحدث موديل مع ذاكرة السياق
     const model = genAI.getGenerativeModel({
-      model: 'gemini-3-flash-preview', 
+      model: 'gemini-3-flash-preview',
       systemInstruction: systemInstruction,
     });
 
-    const result = await model.generateContent(message);
+    const chat = model.startChat({
+      history: history || [],
+    });
+
+    const result = await chat.sendMessage(message);
     const responseText = result.response.text();
 
     return NextResponse.json({ text: responseText });
