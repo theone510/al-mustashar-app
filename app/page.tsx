@@ -203,10 +203,10 @@ export default function Home() {
 
           <button 
             onClick={createNewSession}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 transition-all font-bold shadow-lg shadow-amber-500/20 active:scale-[0.95]"
+            className="flex-shrink-0 flex items-center gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-amber-500 text-slate-950 hover:bg-amber-400 transition-all font-bold shadow-lg shadow-amber-500/20 active:scale-[0.95] z-30"
           >
-            <span className="text-xl">+</span>
-            <span className="hidden xs:block">استشارة جديدة</span>
+            <span className="text-xl leading-none">+</span>
+            <span className="hidden sm:block">استشارة جديدة</span>
           </button>
         </header>
 
