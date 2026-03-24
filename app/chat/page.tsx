@@ -245,7 +245,6 @@ export default function ChatPage() {
              </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-medium text-amber-500 tracking-wider">GPT-4o</span>
           </div>
         </header>
 
