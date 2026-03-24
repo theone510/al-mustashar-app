@@ -23,14 +23,18 @@ function getFileInfo(name: string) {
   return { color: 'text-slate-400', bg: 'bg-slate-500/15', border: 'border-slate-500/20', label: ext?.toUpperCase() || 'ملف', iconPath: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z' };
 }
 
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / 1048576).toFixed(1) + ' MB';
-}
-
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('ar-IQ', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function isImageFile(name: string) {
+  const ext = name.split('.').pop()?.toLowerCase();
+  return ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg', 'bmp'].includes(ext || '');
+}
+
+function getPublicUrl(storagePath: string) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  return `${supabaseUrl}/storage/v1/object/public/client_documents/${storagePath}`;
 }
 
 export default function FilesPage() {
@@ -43,6 +47,7 @@ export default function FilesPage() {
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState<'name' | 'date'>('date');
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const fetchFiles = useCallback(async () => {
     setIsLoading(true);
@@ -60,8 +65,11 @@ export default function FilesPage() {
   const deleteFile = async (file: ClientFile) => {
     if (!confirm(`هل أنت متأكد من حذف "${file.file_name}"؟`)) return;
 
-    await supabase.storage.from('client_documents').remove([file.storage_path]);
-    await supabase.from('client_files').delete().eq('id', file.id);
+    await fetch('/api/upload', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: file.id, storagePath: file.storage_path }),
+    });
     setFiles(prev => prev.filter(f => f.id !== file.id));
     setSelectedFiles(prev => { const n = new Set(prev); n.delete(file.id); return n; });
   };
@@ -71,19 +79,21 @@ export default function FilesPage() {
     if (!confirm(`هل أنت متأكد من حذف ${selectedFiles.size} ملف(ملفات)؟`)) return;
     
     const toDelete = files.filter(f => selectedFiles.has(f.id));
-    await supabase.storage.from('client_documents').remove(toDelete.map(f => f.storage_path));
-    
     for (const f of toDelete) {
-      await supabase.from('client_files').delete().eq('id', f.id);
+      await fetch('/api/upload', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: f.id, storagePath: f.storage_path }),
+      });
     }
     
     setFiles(prev => prev.filter(f => !selectedFiles.has(f.id)));
     setSelectedFiles(new Set());
   };
 
-  const downloadFile = async (file: ClientFile) => {
-    const { data } = supabase.storage.from('client_documents').getPublicUrl(file.storage_path);
-    if (data?.publicUrl) window.open(data.publicUrl, '_blank');
+  const downloadFile = (file: ClientFile) => {
+    const url = getPublicUrl(file.storage_path);
+    window.open(url, '_blank');
   };
 
   const handleUploadFiles = async (fileList: FileList) => {
@@ -94,18 +104,15 @@ export default function FilesPage() {
       const file = fileList[i];
       setUploadProgress(`جاري رفع ${i + 1}/${total}: ${file.name}`);
 
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `general/${fileName}`;
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', isImageFile(file.name) ? 'images' : 'general');
 
-      const { error: uploadError } = await supabase.storage.from('client_documents').upload(filePath, file);
-      if (uploadError) { console.error('Upload Error:', uploadError); continue; }
-      
-      await supabase.from('client_files').insert([{
-        client_id: null,
-        file_name: file.name,
-        storage_path: filePath
-      }]);
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        console.error('Upload Error:', err.error);
+      }
     }
 
     setIsUploading(false);
@@ -252,6 +259,70 @@ export default function FilesPage() {
           </div>
         ))}
       </div>
+
+      {/* ══════ Images Gallery Section ══════ */}
+      {(() => {
+        const imageFiles = sorted.filter(f => isImageFile(f.file_name));
+        if (imageFiles.length === 0) return null;
+        return (
+          <div className="glass-card rounded-2xl p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">معرض الصور</h3>
+                  <p className="text-xs text-slate-500">{imageFiles.length} صورة</p>
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              {imageFiles.map(img => (
+                <div
+                  key={img.id}
+                  className="group relative aspect-square rounded-xl overflow-hidden border border-white/5 cursor-pointer hover:border-amber-500/30 transition-all"
+                  onClick={() => setPreviewImage(getPublicUrl(img.storage_path))}
+                >
+                  <img
+                    src={getPublicUrl(img.storage_path)}
+                    alt={img.file_name}
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-2">
+                    <p className="text-[11px] text-white font-medium truncate w-full">{img.file_name}</p>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deleteFile(img); }}
+                    className="absolute top-2 left-2 p-1.5 rounded-lg bg-black/50 text-white/70 hover:text-red-400 hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══════ Image Preview Lightbox ══════ */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button className="absolute top-6 left-6 p-3 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-colors" onClick={() => setPreviewImage(null)}>
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+          <img
+            src={previewImage}
+            alt="معاينة"
+            className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* File Content */}
       {isLoading ? (
